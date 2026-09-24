@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ profile.name }} - SmartClinic+{% endblock %}
+{% block content %}
+<h1>Edit profile: {{ profile.name }}</h1>
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3">
+    <label class="form-label" for="date_of_birth">Date of birth</label>
+    <input class="form-control" type="date" id="date_of_birth" name="date_of_birth"
+           value="{{ profile.date_of_birth or '' }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="contact_info">Contact info</label>
+    <input class="form-control" type="text" id="contact_info" name="contact_info"
+           value="{{ profile.contact_info or '' }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="current_medications">Current medications</label>
+    <textarea class="form-control" id="current_medications" name="current_medications"
+              rows="3">{{ profile.current_medications or '' }}</textarea>
+  </div>
+  <button class="btn btn-primary" type="submit">Save</button>
+  <a class="btn btn-outline-secondary" href="{{ url_for('patient_view', profile_id=profile.id) }}">Cancel</a>
+</form>
+{% endblock %}

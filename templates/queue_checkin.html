@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Check in - SmartClinic+{% endblock %}
+{% block content %}
+<h1 class="mb-4">{{ "Check in a patient" if is_staff else "Check in" }}</h1>
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  {# Staff only: pick patient #}
+  {% if is_staff %}
+  <div class="mb-3">
+    <label class="form-label" for="patient_id">Patient</label>
+    <select class="form-select" id="patient_id" name="patient_id" required>
+      <option value="">Choose a patient...</option>
+      {% for patient in patients %}
+        <option value="{{ patient.id }}">{{ patient.name }} ({{ patient.email }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="mb-3">
+    <label class="form-label" for="doctor_id">Doctor</label>
+    <select class="form-select" id="doctor_id" name="doctor_id">
+      <option value="">Any available doctor</option>
+      {% for doctor in doctors %}
+        <option value="{{ doctor.id }}">{{ doctor.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="reason">Reason for visit</label>
+    <input class="form-control" type="text" id="reason" name="reason" maxlength="255">
+  </div>
+
+  {# Staff only: mark urgent #}
+  {% if is_staff %}
+  <div class="mb-3">
+    <label class="form-label" for="priority">Priority</label>
+    <select class="form-select" id="priority" name="priority">
+      <option value="normal">Normal</option>
+      <option value="urgent">Urgent</option>
+    </select>
+  </div>
+  {% endif %}
+
+  <button class="btn btn-primary" type="submit">Check in</button>
+</form>
+{% endblock %}

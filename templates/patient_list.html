@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Patients - SmartClinic+{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1>Patients</h1>
+  {% if current_user.role == "admin" %}
+    <a class="btn btn-primary" href="{{ url_for('user_new') }}">+ New account</a>
+  {% endif %}
+</div>
+
+<table class="table table-striped bg-white">
+  <thead>
+    <tr><th>Name</th><th>Email</th><th>Date of birth</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for patient in patients %}
+    <tr>
+      <td>{{ patient.name }}</td>
+      <td>{{ patient.email }}</td>
+      <td>{{ patient.date_of_birth or "-" }}</td>
+      <td><a href="{{ url_for('patient_view', profile_id=patient.id) }}">View</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="text-muted">No patients yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

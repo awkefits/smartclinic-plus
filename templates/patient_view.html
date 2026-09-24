@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.name }} - SmartClinic+{% endblock %}
+{% block content %}
+<h1>{{ profile.name }}</h1>
+
+<dl class="row">
+  <dt class="col-sm-3">Email</dt>
+  <dd class="col-sm-9">{{ profile.email }}</dd>
+  <dt class="col-sm-3">Date of birth</dt>
+  <dd class="col-sm-9">{{ profile.date_of_birth or "-" }}</dd>
+  <dt class="col-sm-3">Contact info</dt>
+  <dd class="col-sm-9">{{ profile.contact_info or "-" }}</dd>
+  <dt class="col-sm-3">Current medications</dt>
+  <dd class="col-sm-9">{{ profile.current_medications or "-" }}</dd>
+</dl>
+
+{% if can_edit %}
+  <a class="btn btn-primary" href="{{ url_for('patient_edit', profile_id=profile.id) }}">Edit</a>
+{% endif %}
+{% if current_user.role != "patient" %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('patient_list') }}">Back to list</a>
+{% endif %}
+{% endblock %}

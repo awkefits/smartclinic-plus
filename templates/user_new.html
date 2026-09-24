@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}New account - SmartClinic+{% endblock %}
+{% block content %}
+<h1 class="mb-4">Create an account</h1>
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3">
+    <label class="form-label" for="name">Full name</label>
+    <input class="form-control" type="text" id="name" name="name" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="email">Email</label>
+    <input class="form-control" type="email" id="email" name="email" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="password">Temporary password</label>
+    <input class="form-control" type="password" id="password" name="password" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="role">Role</label>
+    <select class="form-select" id="role" name="role" required>
+      {% for role in roles %}
+        <option value="{{ role }}">{{ role.title() }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button class="btn btn-primary" type="submit">Create account</button>
+</form>
+{% endblock %}

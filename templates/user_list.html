@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Users - SmartClinic+{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1>Users</h1>
+  <a class="btn btn-primary" href="{{ url_for('user_new') }}">+ New account</a>
+</div>
+
+<table class="table table-striped bg-white">
+  <thead>
+    <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+  </thead>
+  <tbody>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.name }}</td>
+      <td>{{ user.email }}</td>
+      <td><span class="badge bg-secondary">{{ user.role }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

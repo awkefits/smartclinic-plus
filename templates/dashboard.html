@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - SmartClinic+{% endblock %}
+{% block content %}
+<h1>Welcome, {{ current_user.name }}</h1>
+<p class="text-muted">You are logged in as <strong>{{ current_user.role }}</strong>.</p>
+
+{% if current_user.role == "patient" %}
+  <a class="btn btn-primary" href="{{ url_for('patient_view', profile_id=my_profile_id) }}">My profile</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('queue_mine') }}">My queue status</a>
+{% else %}
+  <a class="btn btn-primary" href="{{ url_for('queue_board') }}">Waiting room</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('patient_list') }}">Patients</a>
+  {% if current_user.role == "admin" %}
+    <a class="btn btn-outline-primary" href="{{ url_for('user_list') }}">Users</a>
+  {% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}My queue status - SmartClinic+{% endblock %}
+{% block head %}{% if entry %}<meta http-equiv="refresh" content="15">{% endif %}{% endblock %}
+{% block content %}
+<h1>My queue status</h1>
+
+{% if not entry %}
+  <p class="text-muted">You are not checked in.</p>
+  <a class="btn btn-primary" href="{{ url_for('queue_checkin') }}">Check in</a>
+
+{% elif entry.status == "waiting" %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <p class="display-4 mb-0">#{{ my_place.place }}</p>
+      <p class="text-muted">
+        Your place in line{% if doctor %} for {{ doctor.name }}{% endif %}.
+      </p>
+      <p class="mb-0">
+        Estimated wait:
+        <strong>
+          {% if my_place.estimated_minutes == 0 %}you're next{% else %}about {{ my_place.estimated_minutes }} minutes{% endif %}
+        </strong>
+      </p>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('queue_cancel', entry_id=entry.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-outline-danger" type="submit">Leave the queue</button>
+  </form>
+  <p class="text-muted small mt-3">This page refreshes itself every 15 seconds.</p>
+
+{% else %}
+  <div class="alert alert-success">
+    You are being seen{% if doctor %} by {{ doctor.name }}{% endif %}.
+  </div>
+{% endif %}
+{% endblock %}
