@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Doctor dashboard - SmartClinic+{% endblock %}
+{% block heading %}Doctor dashboard{% endblock %}
+{% block content %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card card-body h-100">
+      <h2 class="h5">Patient lookup</h2>
+      <p class="text-muted small">Search a patient by name or ID, then select them for consultation notes.</p>
+      <form method="get" class="d-flex gap-2">
+        <input class="form-control" type="search" name="q" value="{{ search }}"
+               placeholder="Patient name or ID" aria-label="Patient name or ID">
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+
+      {% if search %}
+      <div class="list-group mt-3">
+        {% for patient in results %}
+        <a class="list-group-item list-group-item-action {{ 'active' if selected and selected.id == patient.id }}"
+           href="{{ url_for('doctor_dashboard', q=search, patient=patient.id) }}">
+          <strong>{{ patient.name }}</strong> &middot; ID {{ patient.id }}<br>
+          <small>Date of birth: {{ patient.date_of_birth|nice_date }}</small>
+        </a>
+        {% else %}
+        <p class="text-muted mb-0">Patient not found.</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card card-body h-100">
+      <h2 class="h5">Consultation notes</h2>
+      {% if not selected %}
+        <p class="text-muted mb-0">Select a patient from the search results to add notes.</p>
+      {% else %}
+        <p class="mb-2">
+          <strong>Selected patient:</strong> {{ selected.name }} (ID {{ selected.id }})
+          &middot; <a href="{{ url_for('patient_view', profile_id=selected.id) }}">Profile</a>
+          &middot; <a href="{{ url_for('prescription_new', patient_id=selected.id) }}">Write prescription</a>
+        </p>
+        <form method="post" action="{{ url_for('note_add', profile_id=selected.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="q" value="{{ search }}">
+          <label class="form-label" for="note">Notes</label>
+          <textarea class="form-control mb-2" id="note" name="note" rows="4" required
+                    placeholder="Enter consultation notes"></textarea>
+          <button class="btn btn-primary" type="submit">Save notes</button>
+        </form>
+
+        <div class="list-group mt-3">
+          {% for note in notes %}
+          <div class="list-group-item">
+            <small class="text-muted">{{ note.created_at.strftime("%d %b %Y, %H:%M") }} &middot; {{ note.doctor_name }}</small>
+            <div style="white-space: pre-line">{{ note.note }}</div>
+          </div>
+          {% else %}
+          <p class="text-muted mb-0">No saved notes for this patient.</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card card-body">
+      <h2 class="h5">My schedule</h2>
+      <p class="text-muted small">Upcoming appointments booked with you.</p>
+      <div class="table-responsive">
+      <table class="table mb-0">
+        <thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Reason</th><th></th></tr></thead>
+        <tbody>
+          {% for appointment in schedule %}
+          <tr>
+            <td>{{ appointment.appointment_date|nice_date }}</td>
+            <td>{{ appointment.appointment_time|slot }}</td>
+            <td>{{ appointment.patient_name }} (ID {{ appointment.patient_id }})</td>
+            <td>{{ appointment.reason or "-" }}</td>
+            <td><a href="{{ url_for('doctor_dashboard', patient=appointment.patient_id) }}">Notes</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">No upcoming appointments.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

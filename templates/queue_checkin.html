@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Check in - SmartClinic+{% endblock %}
+{% block heading %}{{ "Check in a patient" if is_staff else "Check in" }}{% endblock %}
 {% block content %}
-<h1 class="mb-4">{{ "Check in a patient" if is_staff else "Check in" }}</h1>
 
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

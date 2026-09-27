@@ -1,7 +1,8 @@
-"""SmartClinic+ - patient profiles, role-based login, waiting-room queue."""
+"""SmartClinic+ - patient profiles, role-based login, waiting-room queue,
+appointments + notifications, doctor dashboard, e-prescriptions."""
 
 import os
-from datetime import datetime
+from datetime import date, datetime
 
 import pymysql
 from dotenv import load_dotenv
@@ -20,6 +21,9 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-not-secure")
 
 # Estimated minutes per patient
 MINUTES_PER_PATIENT = 15
+
+# Bookable appointment times (24-hour, same every day)
+TIME_SLOTS = ("09:00", "10:00", "11:00", "13:00", "14:00")
 
 # Form security (CSRF)
 CSRFProtect(app)
@@ -118,6 +122,28 @@ def profile_id_of(user_id):
     return row["id"] if row else None
 
 
+@app.template_filter("slot")
+def format_slot(slot):
+    """'13:00' -> '1:00 PM'."""
+    return datetime.strptime(slot, "%H:%M").strftime("%I:%M %p").lstrip("0")
+
+
+@app.template_filter("nice_date")
+def format_date(value):
+    """date -> '1 Oct 2026'. None -> '-'."""
+    return f"{value.day} {value.strftime('%b %Y')}" if value else "-"
+
+
+@app.context_processor
+def unread_notifications():
+    """Unread count for the navbar badge."""
+    if not current_user.is_authenticated:
+        return {"unread_count": 0}
+    row = run_sql("SELECT COUNT(*) AS total FROM notifications WHERE user_id = %s AND is_read = 0",
+                  (current_user.id,), "one")
+    return {"unread_count": row["total"]}
+
+
 # --- 4. Login Pages ---
 
 @app.route("/")
@@ -156,6 +182,8 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
     if request.method == "POST":
         email = request.form["email"].strip().lower()
         row = run_sql("SELECT * FROM users WHERE email = %s", (email,), "one")
@@ -178,8 +206,61 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    my_profile_id = profile_id_of(current_user.id) if current_user.role == "patient" else None
-    return render_template("dashboard.html", my_profile_id=my_profile_id)
+    """Home page: profile card + tabs of short lists for the user's role."""
+    today = date.today()
+    tabs = {}
+    my_profile_id = None
+    queue_entry = my_place = None
+
+    if current_user.role == "patient":
+        my_profile_id = profile_id_of(current_user.id)
+        tabs["appointments"] = run_sql(
+            APPOINTMENT_SELECT + """ WHERE a.patient_id = %s AND a.status = 'scheduled' AND a.appointment_date >= %s
+                                     ORDER BY a.appointment_date, a.appointment_time LIMIT 5""",
+            (my_profile_id, today), "all",
+        )
+        tabs["prescriptions"] = recent_prescriptions("rx.patient_id = %s", my_profile_id)
+        queue_entry = active_entry_of(my_profile_id)
+        if queue_entry and queue_entry["status"] == "waiting":
+            my_place = next((w for w in get_waiting_list() if w["id"] == queue_entry["id"]), None)
+    else:
+        mine = current_user.role == "doctor"
+        tabs["appointments"] = run_sql(
+            APPOINTMENT_SELECT + " WHERE a.appointment_date = %s AND a.status = 'scheduled'"
+            + (" AND a.doctor_id = %s" if mine else "") + " ORDER BY a.appointment_time",
+            (today, current_user.id) if mine else (today,), "all",
+        )
+        waiting = get_waiting_list()
+        if mine:  # own line + the "any doctor" line
+            waiting = [w for w in waiting if w["doctor_id"] in (None, current_user.id)]
+        tabs["waiting"] = waiting
+        if mine:
+            tabs["prescriptions"] = recent_prescriptions("rx.doctor_id = %s", current_user.id)
+        else:
+            tabs["patients"] = run_sql(
+                """SELECT p.id, p.date_of_birth, u.name, u.email
+                   FROM patient_profiles p JOIN users u ON u.id = p.user_id
+                   ORDER BY p.id DESC LIMIT 5""",
+                fetch="all",
+            )
+
+    initials = "".join(word[0] for word in current_user.name.replace("Dr.", "").split()[:2]).upper()
+    return render_template("dashboard.html", my_profile_id=my_profile_id, tabs=tabs, initials=initials,
+                           queue_entry=queue_entry, my_place=my_place)
+
+
+def recent_prescriptions(where, value):
+    """Latest 5 prescriptions matching one condition, e.g. 'rx.doctor_id = %s'."""
+    return run_sql(
+        """SELECT rx.id, rx.issued_on, pu.name AS patient_name, d.name AS doctor_name,
+                  (SELECT COUNT(*) FROM prescription_items i WHERE i.prescription_id = rx.id) AS item_count
+           FROM prescriptions rx
+           JOIN patient_profiles p ON p.id = rx.patient_id
+           JOIN users pu ON pu.id = p.user_id
+           JOIN users d ON d.id = rx.doctor_id
+           WHERE """ + where + " ORDER BY rx.issued_on DESC, rx.id DESC LIMIT 5",
+        (value,), "all",
+    )
 
 
 # --- 5. Patient Pages ---
@@ -218,7 +299,16 @@ def patient_view(profile_id):
     if not (is_mine or current_user.role in STAFF):
         abort(403)
     can_edit = is_mine or current_user.role == "admin"
-    return render_template("patient_view.html", profile=profile, can_edit=can_edit)
+    prescriptions = run_sql(
+        """SELECT rx.id, rx.issued_on, d.name AS doctor_name,
+                  (SELECT COUNT(*) FROM prescription_items i WHERE i.prescription_id = rx.id) AS item_count
+           FROM prescriptions rx JOIN users d ON d.id = rx.doctor_id
+           WHERE rx.patient_id = %s ORDER BY rx.issued_on DESC, rx.id DESC""",
+        (profile_id,), "all",
+    )
+    notes = notes_for(profile_id) if current_user.role in STAFF else []
+    return render_template("patient_view.html", profile=profile, can_edit=can_edit,
+                           prescriptions=prescriptions, notes=notes)
 
 
 @app.route("/patients/<int:profile_id>/edit", methods=["GET", "POST"])
@@ -422,8 +512,8 @@ def queue_checkin():
         return show_form()
 
     run_sql(
-        """INSERT INTO queue_entries (patient_id, doctor_id, priority, reason, checked_in_at)
-           VALUES (%s, %s, %s, %s, %s)""",
+        """INSERT INTO queue_entries (patient_id, doctor_id, status, priority, reason, checked_in_at)
+           VALUES (%s, %s, 'waiting', %s, %s, %s)""",
         (profile_id, doctor_id, priority, request.form["reason"].strip()[:255] or None,
          datetime.now()),
     )
@@ -491,6 +581,408 @@ def queue_cancel(entry_id):
             (datetime.now(), entry_id))
     flash("Check-in cancelled.", "success")
     return back_to_queue()
+
+
+# --- 8. Appointment Pages (Booking + Notifications) ---
+# Patient: book/manage own | Nurse/Admin: book/manage any | Doctor: see/manage own
+# Status: scheduled -> cancelled. Every change notifies the patient and the doctor.
+
+BOOKING_STAFF = ("nurse", "admin")
+
+APPOINTMENT_SELECT = """
+    SELECT a.*, p.user_id AS patient_user_id, pu.name AS patient_name, d.name AS doctor_name
+    FROM appointments a
+    JOIN patient_profiles p ON p.id = a.patient_id
+    JOIN users pu ON pu.id = p.user_id
+    JOIN users d ON d.id = a.doctor_id
+"""
+
+
+def all_doctors():
+    return run_sql("SELECT id, name FROM users WHERE role = 'doctor' ORDER BY name", fetch="all")
+
+
+def all_patients():
+    return run_sql(
+        """SELECT p.id, u.name, u.email
+           FROM patient_profiles p JOIN users u ON u.id = p.user_id ORDER BY u.name""",
+        fetch="all",
+    )
+
+
+def free_slots(doctor_id, day, ignore_appointment_id=0):
+    """Times the doctor is still free that day (past times today are left out)."""
+    rows = run_sql(
+        """SELECT appointment_time FROM appointments
+           WHERE doctor_id = %s AND appointment_date = %s AND status = 'scheduled' AND id <> %s""",
+        (doctor_id, day, ignore_appointment_id), "all",
+    )
+    taken = {row["appointment_time"] for row in rows}
+    slots = [slot for slot in TIME_SLOTS if slot not in taken]
+    if day == date.today():
+        now = datetime.now().strftime("%H:%M")
+        slots = [slot for slot in slots if slot > now]
+    return slots
+
+
+def read_booking_date(text):
+    """Form date -> date. Flashes and returns None if invalid or in the past."""
+    try:
+        day = parse_date(text)
+    except ValueError:
+        day = None
+    if day is None:
+        flash("Pick a valid date.", "danger")
+    elif day < date.today():
+        flash("Pick today or a future date.", "danger")
+        day = None
+    return day
+
+
+def notify(user_id, appointment_id, notification_type, message):
+    run_sql(
+        """INSERT INTO notifications (user_id, appointment_id, notification_type, message, created_at)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (user_id, appointment_id, notification_type, message, datetime.now()),
+    )
+
+
+def notify_both(appointment, notification_type, headline):
+    """Tell the patient and the doctor about an appointment change."""
+    when = f"{format_date(appointment['appointment_date'])} at {format_slot(appointment['appointment_time'])}"
+    notify(appointment["patient_user_id"], appointment["id"], notification_type,
+           f"{headline}: {appointment['doctor_name']} on {when}.")
+    notify(appointment["doctor_id"], appointment["id"], notification_type,
+           f"{headline}: {appointment['patient_name']} on {when}.")
+
+
+def get_appointment_or_404(appointment_id):
+    appointment = run_sql(APPOINTMENT_SELECT + " WHERE a.id = %s", (appointment_id,), "one")
+    if appointment is None:
+        abort(404)
+    return appointment
+
+
+def require_appointment_access(appointment):
+    """403 unless it's the user's own appointment (or they are nurse/admin)."""
+    if current_user.role == "patient":
+        allowed = appointment["patient_user_id"] == current_user.id
+    elif current_user.role == "doctor":
+        allowed = appointment["doctor_id"] == current_user.id
+    else:
+        allowed = current_user.role in BOOKING_STAFF
+    if not allowed:
+        abort(403)
+
+
+@app.route("/appointments")
+@login_required
+def appointment_list():
+    if current_user.role == "patient":
+        where, args = "WHERE a.patient_id = %s", (profile_id_of(current_user.id),)
+    elif current_user.role == "doctor":
+        where, args = "WHERE a.doctor_id = %s", (current_user.id,)
+    else:
+        where, args = "", ()
+    appointments = run_sql(
+        APPOINTMENT_SELECT + where + " ORDER BY a.appointment_date, a.appointment_time",
+        args, "all",
+    )
+    return render_template("appointment_list.html", appointments=appointments, today=date.today())
+
+
+@app.route("/appointments/book", methods=["GET", "POST"])
+@login_required
+def appointment_book():
+    """Step 1 (GET): pick doctor + date. Step 2 (POST): pick a free time."""
+    is_staff = current_user.role in BOOKING_STAFF
+    if not is_staff:
+        require_role("patient")
+
+    doctors = all_doctors()
+    patients = all_patients() if is_staff else []
+    source = request.form if request.method == "POST" else request.args
+    doctor_id = source.get("doctor_id", type=int)
+    patient_id = source.get("patient_id", type=int) if is_staff else profile_id_of(current_user.id)
+    day = None
+    slots = None  # None = not searched yet
+
+    def show_form():
+        return render_template("appointment_book.html", doctors=doctors, patients=patients,
+                               is_staff=is_staff, doctor_id=doctor_id, patient_id=patient_id,
+                               day=day, slots=slots, today=date.today())
+
+    if not source.get("date"):
+        return show_form()
+
+    day = read_booking_date(source.get("date"))
+    doctor = next((d for d in doctors if d["id"] == doctor_id), None)
+    if doctor is None:
+        flash("Choose a doctor from the list.", "danger")
+    if is_staff and not any(p["id"] == patient_id for p in patients):
+        flash("Choose a patient.", "danger")
+        return show_form()
+    if day is None or doctor is None:
+        return show_form()
+
+    slots = free_slots(doctor_id, day)
+    if request.method == "GET":
+        return show_form()
+
+    time = request.form.get("time")
+    if time not in slots:
+        flash("That time is no longer free. Pick another one.", "danger")
+        return show_form()
+
+    appointment_id = run_sql(
+        """INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, reason, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (patient_id, doctor_id, day, time, request.form.get("reason", "").strip()[:255] or None,
+         datetime.now()),
+    )
+    notify_both(get_appointment_or_404(appointment_id), "Confirmation", "Appointment booked")
+    flash("Appointment booked.", "success")
+    return redirect(url_for("appointment_list"))
+
+
+@app.route("/appointments/<int:appointment_id>/reschedule", methods=["GET", "POST"])
+@login_required
+def appointment_reschedule(appointment_id):
+    appointment = get_appointment_or_404(appointment_id)
+    require_appointment_access(appointment)
+    if appointment["status"] != "scheduled":
+        flash("Only scheduled appointments can be moved.", "danger")
+        return redirect(url_for("appointment_list"))
+
+    source = request.form if request.method == "POST" else request.args
+    day = None
+    slots = None
+
+    def show_form():
+        return render_template("appointment_reschedule.html", appointment=appointment,
+                               day=day, slots=slots, today=date.today())
+
+    if not source.get("date"):
+        return show_form()
+
+    day = read_booking_date(source.get("date"))
+    if day is None:
+        return show_form()
+    slots = free_slots(appointment["doctor_id"], day, appointment_id)
+    if request.method == "GET":
+        return show_form()
+
+    time = request.form.get("time")
+    if time not in slots:
+        flash("That time is no longer free. Pick another one.", "danger")
+        return show_form()
+
+    run_sql("UPDATE appointments SET appointment_date = %s, appointment_time = %s WHERE id = %s",
+            (day, time, appointment_id))
+    notify_both(get_appointment_or_404(appointment_id), "Update", "Appointment moved to a new time")
+    flash("Appointment moved.", "success")
+    return redirect(url_for("appointment_list"))
+
+
+@app.route("/appointments/<int:appointment_id>/cancel", methods=["POST"])
+@login_required
+def appointment_cancel(appointment_id):
+    appointment = get_appointment_or_404(appointment_id)
+    require_appointment_access(appointment)
+    if appointment["status"] != "scheduled":
+        flash("That appointment is already cancelled.", "danger")
+        return redirect(url_for("appointment_list"))
+
+    run_sql("UPDATE appointments SET status = 'cancelled' WHERE id = %s", (appointment_id,))
+    notify_both(appointment, "Cancellation", "Appointment cancelled")
+    flash("Appointment cancelled.", "success")
+    return redirect(url_for("appointment_list"))
+
+
+@app.route("/notifications")
+@login_required
+def notification_list():
+    notifications = run_sql(
+        "SELECT * FROM notifications WHERE user_id = %s ORDER BY created_at DESC, id DESC",
+        (current_user.id,), "all",
+    )
+    run_sql("UPDATE notifications SET is_read = 1 WHERE user_id = %s", (current_user.id,))
+    return render_template("notification_list.html", notifications=notifications)
+
+
+# --- 9. Doctor Dashboard (Patient Lookup + Consultation Notes) ---
+
+def notes_for(profile_id):
+    return run_sql(
+        """SELECT n.*, d.name AS doctor_name
+           FROM consultation_notes n JOIN users d ON d.id = n.doctor_id
+           WHERE n.patient_id = %s ORDER BY n.created_at DESC, n.id DESC""",
+        (profile_id,), "all",
+    )
+
+
+@app.route("/doctor")
+@login_required
+def doctor_dashboard():
+    require_role("doctor")
+    search = request.args.get("q", "").strip()
+    results = []
+    if search:
+        like = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        results = run_sql(
+            """SELECT p.id, p.date_of_birth, u.name, u.email
+               FROM patient_profiles p JOIN users u ON u.id = p.user_id
+               WHERE u.name LIKE %s OR p.id = %s ORDER BY u.name""",
+            (like, int(search) if search.isdigit() else 0), "all",
+        )
+
+    selected = None
+    notes = []
+    selected_id = request.args.get("patient", type=int)
+    if selected_id:
+        selected = get_profile_or_404(selected_id)
+        notes = notes_for(selected_id)
+
+    schedule = run_sql(
+        APPOINTMENT_SELECT + """ WHERE a.doctor_id = %s AND a.status = 'scheduled' AND a.appointment_date >= %s
+                                 ORDER BY a.appointment_date, a.appointment_time""",
+        (current_user.id, date.today()), "all",
+    )
+    return render_template("doctor_dashboard.html", search=search, results=results,
+                           selected=selected, notes=notes, schedule=schedule)
+
+
+@app.route("/patients/<int:profile_id>/notes", methods=["POST"])
+@login_required
+def note_add(profile_id):
+    require_role("doctor")
+    get_profile_or_404(profile_id)
+    note = request.form.get("note", "").strip()
+    if not note:
+        flash("Consultation notes cannot be empty.", "danger")
+    else:
+        run_sql(
+            "INSERT INTO consultation_notes (patient_id, doctor_id, note, created_at) VALUES (%s, %s, %s, %s)",
+            (profile_id, current_user.id, note, datetime.now()),
+        )
+        flash("Notes saved.", "success")
+    return redirect(url_for("doctor_dashboard", patient=profile_id, q=request.form.get("q", "")))
+
+
+# --- 10. E-Prescription Pages ---
+# Doctor: write | Patient: view own | Staff: view all
+
+MEDICATION_FORMS = ("Tablet", "Capsule", "Liquid", "Injection", "Topical", "Other")
+MEDICATION_FIELDS = ("drug_name", "strength", "form", "frequency", "duration", "quantity")
+
+
+def get_prescription_or_404(prescription_id):
+    prescription = run_sql(
+        """SELECT rx.*, pu.name AS patient_name, p.user_id AS patient_user_id, p.date_of_birth,
+                  d.name AS doctor_name
+           FROM prescriptions rx
+           JOIN patient_profiles p ON p.id = rx.patient_id
+           JOIN users pu ON pu.id = p.user_id
+           JOIN users d ON d.id = rx.doctor_id
+           WHERE rx.id = %s""",
+        (prescription_id,), "one",
+    )
+    if prescription is None:
+        abort(404)
+    return prescription
+
+
+@app.route("/prescriptions")
+@login_required
+def prescription_list():
+    if current_user.role == "patient":
+        where, args = "WHERE rx.patient_id = %s", (profile_id_of(current_user.id),)
+    elif current_user.role == "doctor":
+        where, args = "WHERE rx.doctor_id = %s", (current_user.id,)
+    else:
+        where, args = "", ()
+    prescriptions = run_sql(
+        """SELECT rx.id, rx.issued_on, pu.name AS patient_name, d.name AS doctor_name,
+                  (SELECT COUNT(*) FROM prescription_items i WHERE i.prescription_id = rx.id) AS item_count
+           FROM prescriptions rx
+           JOIN patient_profiles p ON p.id = rx.patient_id
+           JOIN users pu ON pu.id = p.user_id
+           JOIN users d ON d.id = rx.doctor_id """ + where + " ORDER BY rx.issued_on DESC, rx.id DESC",
+        args, "all",
+    )
+    return render_template("prescription_list.html", prescriptions=prescriptions)
+
+
+@app.route("/prescriptions/new", methods=["GET", "POST"])
+@login_required
+def prescription_new():
+    require_role("doctor")
+    patients = all_patients()
+    form = request.form if request.method == "POST" else {}
+
+    # One dict per medication row, from the repeated form fields
+    columns = [request.form.getlist(field) for field in MEDICATION_FIELDS]
+    medications = [dict(zip(MEDICATION_FIELDS, (value.strip() for value in row))) for row in zip(*columns)]
+    medications = [m for m in medications if m["drug_name"]]
+
+    def show_form():
+        return render_template("prescription_new.html", patients=patients, form=form,
+                               medications=medications or [{}], forms=MEDICATION_FORMS,
+                               selected_patient=request.values.get("patient_id", type=int),
+                               today=date.today())
+
+    if request.method == "GET":
+        return show_form()
+
+    patient_id = request.form.get("patient_id", type=int)
+    license_number = request.form.get("license_number", "").strip()
+    try:
+        issued_on = parse_date(request.form.get("issued_on")) or date.today()
+    except ValueError:
+        flash("Date issued must be a real date.", "danger")
+        return show_form()
+
+    if not any(p["id"] == patient_id for p in patients):
+        flash("Choose a patient.", "danger")
+    elif not license_number:
+        flash("Enter your license / registration number.", "danger")
+    elif not medications:
+        flash("Add at least one medication.", "danger")
+    elif any(not m["strength"] or not m["frequency"] for m in medications):
+        flash("Every medication needs a strength and a dosage / frequency.", "danger")
+    else:
+        prescription_id = run_sql(
+            """INSERT INTO prescriptions (patient_id, doctor_id, license_number, allergies, instructions,
+                                          issued_on, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (patient_id, current_user.id, license_number[:60],
+             request.form.get("allergies", "").strip()[:255] or None,
+             request.form.get("instructions", "").strip() or None, issued_on, datetime.now()),
+        )
+        for m in medications:
+            run_sql(
+                """INSERT INTO prescription_items (prescription_id, drug_name, strength, form, frequency,
+                                                   duration, quantity)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (prescription_id, m["drug_name"][:120], m["strength"][:60],
+                 m["form"] if m["form"] in MEDICATION_FORMS else None, m["frequency"][:120],
+                 m["duration"][:60] or None, m["quantity"][:60] or None),
+            )
+        flash("Prescription created.", "success")
+        return redirect(url_for("prescription_view", prescription_id=prescription_id))
+
+    return show_form()
+
+
+@app.route("/prescriptions/<int:prescription_id>")
+@login_required
+def prescription_view(prescription_id):
+    prescription = get_prescription_or_404(prescription_id)
+    if not (prescription["patient_user_id"] == current_user.id or current_user.role in STAFF):
+        abort(403)
+    items = run_sql("SELECT * FROM prescription_items WHERE prescription_id = %s ORDER BY id",
+                    (prescription_id,), "all")
+    return render_template("prescription_view.html", rx=prescription, items=items)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Prescriptions - SmartClinic+{% endblock %}
+{% block heading %}{{ "My prescriptions" if current_user.role == "patient" else "Prescriptions" }}{% endblock %}
+{% block heading_actions %}
+{% if current_user.role == "doctor" %}
+    <a class="btn btn-light" href="{{ url_for('prescription_new') }}">+ Write a prescription</a>
+  {% endif %}
+{% endblock %}
+{% block content %}
+
+<div class="sc-card overflow-hidden">
+<table class="table table-hover mb-0">
+  <thead>
+    <tr>
+      <th>Rx no.</th><th>Issued</th>
+      {% if current_user.role != "patient" %}<th>Patient</th>{% endif %}
+      <th>Prescriber</th><th>Medications</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for rx in prescriptions %}
+    <tr>
+      <td>RX-{{ "%06d"|format(rx.id) }}</td>
+      <td>{{ rx.issued_on|nice_date }}</td>
+      {% if current_user.role != "patient" %}<td>{{ rx.patient_name }}</td>{% endif %}
+      <td>{{ rx.doctor_name }}</td>
+      <td>{{ rx.item_count }}</td>
+      <td><a href="{{ url_for('prescription_view', prescription_id=rx.id) }}">View</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-muted">No prescriptions yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

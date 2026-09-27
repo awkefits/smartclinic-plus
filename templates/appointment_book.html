@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Book an appointment - SmartClinic+{% endblock %}
+{% block heading %}Book an appointment{% endblock %}
+{% block content %}
+
+{# Step 1: who and when #}
+<form method="get" class="card card-body mb-4">
+  {% if is_staff %}
+  <div class="mb-3">
+    <label class="form-label" for="patient_id">Patient</label>
+    <select class="form-select" id="patient_id" name="patient_id" required>
+      <option value="">Choose a patient...</option>
+      {% for patient in patients %}
+        <option value="{{ patient.id }}" {{ "selected" if patient.id == patient_id }}>{{ patient.name }} ({{ patient.email }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <label class="form-label" for="doctor_id">Doctor</label>
+      <select class="form-select" id="doctor_id" name="doctor_id" required>
+        <option value="">Choose a doctor...</option>
+        {% for doctor in doctors %}
+          <option value="{{ doctor.id }}" {{ "selected" if doctor.id == doctor_id }}>{{ doctor.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6 mb-3">
+      <label class="form-label" for="date">Date</label>
+      <input class="form-control" type="date" id="date" name="date" min="{{ today }}"
+             value="{{ day or '' }}" required>
+    </div>
+  </div>
+  <div><button class="btn btn-outline-primary" type="submit">Show available times</button></div>
+</form>
+
+{# Step 2: pick a free time #}
+{% if slots is not none %}
+  {% if slots %}
+  <form method="post" class="card card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="doctor_id" value="{{ doctor_id }}">
+    <input type="hidden" name="date" value="{{ day }}">
+    {% if is_staff %}<input type="hidden" name="patient_id" value="{{ patient_id }}">{% endif %}
+
+    <p class="mb-2"><strong>Available times on {{ day|nice_date }}</strong></p>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      {% for slot in slots %}
+        <input type="radio" class="btn-check" name="time" id="slot{{ loop.index }}" value="{{ slot }}"
+               required {{ "checked" if loop.first }}>
+        <label class="btn btn-outline-primary" for="slot{{ loop.index }}">{{ slot|slot }}</label>
+      {% endfor %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="reason">Reason for visit</label>
+      <input class="form-control" type="text" id="reason" name="reason" maxlength="255">
+    </div>
+    <div><button class="btn btn-primary" type="submit">Book appointment</button></div>
+  </form>
+  {% else %}
+    <div class="alert alert-warning">No available times that day. Try another date.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}

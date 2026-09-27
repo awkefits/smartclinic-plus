@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Reschedule - SmartClinic+{% endblock %}
+{% block heading %}Reschedule appointment{% endblock %}
+{% block content %}
+<p class="text-muted">
+  {{ appointment.patient_name }} with {{ appointment.doctor_name }} &middot;
+  currently {{ appointment.appointment_date|nice_date }} at {{ appointment.appointment_time|slot }}
+</p>
+
+<form method="get" class="card card-body mb-4">
+  <label class="form-label" for="date">New date</label>
+  <div class="d-flex gap-2">
+    <input class="form-control" type="date" id="date" name="date" min="{{ today }}"
+           value="{{ day or '' }}" required>
+    <button class="btn btn-outline-primary text-nowrap" type="submit">Show available times</button>
+  </div>
+</form>
+
+{% if slots is not none %}
+  {% if slots %}
+  <form method="post" class="card card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="date" value="{{ day }}">
+    <p class="mb-2"><strong>Available times on {{ day|nice_date }}</strong></p>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      {% for slot in slots %}
+        <input type="radio" class="btn-check" name="time" id="slot{{ loop.index }}" value="{{ slot }}"
+               required {{ "checked" if loop.first }}>
+        <label class="btn btn-outline-primary" for="slot{{ loop.index }}">{{ slot|slot }}</label>
+      {% endfor %}
+    </div>
+    <div>
+      <button class="btn btn-primary" type="submit">Move appointment</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('appointment_list') }}">Back</a>
+    </div>
+  </form>
+  {% else %}
+    <div class="alert alert-warning">No available times that day. Try another date.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}

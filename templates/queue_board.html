@@ -2,14 +2,15 @@
 {% block title %}Queue - SmartClinic+{% endblock %}
 {# Auto-refresh every 20s #}
 {% block head %}<meta http-equiv="refresh" content="20">{% endblock %}
+{% block heading %}Waiting room{% endblock %}
+{% block heading_actions %}
+<a class="btn btn-light" href="{{ url_for('queue_checkin') }}">+ Check in a patient</a>
+{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1>Waiting room</h1>
-  <a class="btn btn-primary" href="{{ url_for('queue_checkin') }}">+ Check in a patient</a>
-</div>
 
 <h2 class="h5">In consultation ({{ in_consultation|length }})</h2>
-<table class="table bg-white mb-4">
+<div class="sc-card overflow-hidden mb-4">
+<table class="table table-hover mb-0">
   <thead><tr><th>Patient</th><th>Doctor</th><th>Since</th><th></th></tr></thead>
   <tbody>
     {% for entry in in_consultation %}
@@ -29,10 +30,12 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 
 <h2 class="h5">Waiting ({{ waiting|length }})</h2>
 <div class="table-responsive">
-<table class="table table-striped bg-white">
+<div class="sc-card overflow-hidden">
+<table class="table table-hover mb-0">
   <thead>
     <tr>
       <th>Place</th><th>Patient</th><th>Doctor</th><th>Priority</th>
@@ -47,9 +50,9 @@
       <td>{{ entry.doctor_name or "Any doctor" }}</td>
       <td>
         {% if entry.priority == "urgent" %}
-          <span class="badge bg-danger">urgent</span>
+          <span class="badge badge-urgent">urgent</span>
         {% else %}
-          <span class="badge bg-secondary">normal</span>
+          <span class="badge badge-normal">normal</span>
         {% endif %}
       </td>
       <td>{{ entry.reason or "-" }}</td>
@@ -71,6 +74,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 </div>
 <p class="text-muted small">This page refreshes itself every 20 seconds.</p>
 {% endblock %}

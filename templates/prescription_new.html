@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Write a prescription - SmartClinic+{% endblock %}
+{% block heading %}Write a prescription{% endblock %}
+{% block content %}
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-6">
+      <div class="card card-body h-100">
+        <h2 class="h5">Patient</h2>
+        <div class="mb-3">
+          <label class="form-label" for="patient_id">Patient</label>
+          <select class="form-select" id="patient_id" name="patient_id" required>
+            <option value="">Choose a patient...</option>
+            {% for patient in patients %}
+              <option value="{{ patient.id }}" {{ "selected" if patient.id == selected_patient }}>{{ patient.name }} (ID {{ patient.id }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label" for="allergies">Known allergies</label>
+          <input class="form-control" type="text" id="allergies" name="allergies" maxlength="255"
+                 value="{{ form.allergies or '' }}" placeholder="e.g. penicillin, sulfa drugs">
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card card-body h-100">
+        <h2 class="h5">Prescriber</h2>
+        <p class="mb-3"><strong>{{ current_user.name }}</strong></p>
+        <div class="mb-3">
+          <label class="form-label" for="license_number">License / registration no.</label>
+          <input class="form-control" type="text" id="license_number" name="license_number" maxlength="60"
+                 value="{{ form.license_number or '' }}" required>
+        </div>
+        <div>
+          <label class="form-label" for="issued_on">Date issued</label>
+          <input class="form-control" type="date" id="issued_on" name="issued_on"
+                 value="{{ form.issued_on or today }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-body mb-4">
+    <h2 class="h5">Medications</h2>
+    <div id="medications">
+      {% for m in medications %}
+      <div class="medication border rounded p-3 mb-3 bg-light">
+        <div class="d-flex justify-content-between mb-2">
+          <strong class="medication-title">Medication {{ loop.index }}</strong>
+          <button type="button" class="btn btn-sm btn-outline-danger remove-medication">Remove</button>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label small">Drug name</label>
+            <input class="form-control" type="text" name="drug_name" maxlength="120" value="{{ m.drug_name or '' }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Strength</label>
+            <input class="form-control" type="text" name="strength" maxlength="60" value="{{ m.strength or '' }}" placeholder="e.g. 500mg" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Form</label>
+            <select class="form-select" name="form">
+              {% for option in forms %}
+                <option {{ "selected" if option == m.form }}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Dosage / frequency</label>
+            <input class="form-control" type="text" name="frequency" maxlength="120" value="{{ m.frequency or '' }}" placeholder="e.g. 1 tablet, 2x daily" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Duration</label>
+            <input class="form-control" type="text" name="duration" maxlength="60" value="{{ m.duration or '' }}" placeholder="e.g. 7 days">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Quantity / refills</label>
+            <input class="form-control" type="text" name="quantity" maxlength="60" value="{{ m.quantity or '' }}" placeholder="e.g. 14 tabs, 1 refill">
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div><button type="button" class="btn btn-outline-primary" id="add-medication">+ Add medication</button></div>
+
+    <label class="form-label mt-4" for="instructions">Additional instructions for pharmacist / patient</label>
+    <textarea class="form-control" id="instructions" name="instructions" rows="3"
+              placeholder="e.g. take with food; review in 2 weeks">{{ form.instructions or '' }}</textarea>
+  </div>
+
+  <button class="btn btn-primary" type="submit">Create prescription</button>
+  <a class="btn btn-outline-secondary" href="{{ url_for('prescription_list') }}">Cancel</a>
+</form>
+
+<script>
+  // Add / remove medication rows by copying the first row
+  const list = document.getElementById('medications');
+
+  function refresh() {
+    const rows = list.querySelectorAll('.medication');
+    rows.forEach((row, i) => {
+      row.querySelector('.medication-title').textContent = 'Medication ' + (i + 1);
+      row.querySelector('.remove-medication').hidden = rows.length === 1;
+    });
+  }
+
+  document.getElementById('add-medication').addEventListener('click', () => {
+    const row = list.querySelector('.medication').cloneNode(true);
+    row.querySelectorAll('input').forEach(input => { input.value = ''; });
+    row.querySelector('select').selectedIndex = 0;
+    list.append(row);
+    refresh();
+    row.querySelector('input').focus();
+  });
+
+  list.addEventListener('click', event => {
+    if (event.target.classList.contains('remove-medication')) {
+      event.target.closest('.medication').remove();
+      refresh();
+    }
+  });
+
+  refresh();
+</script>
+{% endblock %}
