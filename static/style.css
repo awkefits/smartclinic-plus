@@ -1,0 +1,96 @@
+/* SmartClinic+ theme: sky blue from the logo, white cards, Poppins. Loaded after Bootstrap. */
+
+:root {
+  --sc-blue: #0098e8;        /* logo blue: banners, accents */
+  --sc-blue-strong: #007cc2; /* buttons + links (readable on white) */
+  --sc-blue-dark: #00639b;   /* hover */
+  --sc-blue-tint: #e3f4fd;   /* soft backgrounds, avatar */
+  --sc-page: #f3f9fd;
+  --sc-ink: #1d3445;
+  --sc-muted: #5f7688;
+  --sc-border: #dcebf5;
+
+  --bs-body-font-family: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bs-body-color: var(--sc-ink);
+  --bs-link-color-rgb: 0, 124, 194;
+  --bs-link-hover-color-rgb: 0, 99, 155;
+  --bs-border-radius: 10px;
+}
+
+body { background: var(--sc-page); font-size: .95rem; }
+h1, h2, h3, h4, h5 { font-weight: 600; }
+
+/* Buttons */
+.btn { font-weight: 500; border-radius: 8px; }
+.btn-primary {
+  --bs-btn-bg: var(--sc-blue-strong); --bs-btn-border-color: var(--sc-blue-strong);
+  --bs-btn-hover-bg: var(--sc-blue-dark); --bs-btn-hover-border-color: var(--sc-blue-dark);
+  --bs-btn-active-bg: var(--sc-blue-dark); --bs-btn-active-border-color: var(--sc-blue-dark);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--sc-blue-strong); --bs-btn-border-color: var(--sc-blue-strong);
+  --bs-btn-hover-bg: var(--sc-blue-strong); --bs-btn-hover-border-color: var(--sc-blue-strong);
+  --bs-btn-active-bg: var(--sc-blue-dark); --bs-btn-active-border-color: var(--sc-blue-dark);
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--sc-blue); box-shadow: 0 0 0 .2rem rgba(0, 152, 232, .2);
+}
+
+/* Top navbar */
+.sc-navbar { background: #fff; border-bottom: 1px solid var(--sc-border); }
+.sc-navbar .navbar-brand img { height: 34px; }
+.sc-navbar .nav-link { color: var(--sc-ink); font-weight: 500; white-space: nowrap; }
+.sc-navbar .nav-link:hover, .sc-navbar .nav-link.active { color: var(--sc-blue-strong); }
+
+/* Page title banner */
+.sc-banner { background: linear-gradient(90deg, var(--sc-blue) 0%, #3bb3f0 100%); color: #fff; }
+.sc-banner h1 { font-size: 1.6rem; margin: 0; }
+
+/* Cards and tables */
+.card, .sc-card {
+  background: #fff; border: 1px solid var(--sc-border); border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(16, 60, 90, .06);
+}
+.card-hover { transition: transform .15s ease, box-shadow .15s ease; }
+.card-hover:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(16, 60, 90, .12); }
+.sc-card > .table { margin-bottom: 0; }
+.table > :not(caption) > * > * { padding: .75rem 1rem; }
+.table thead th { color: var(--sc-muted); font-weight: 500; font-size: .85rem; background: #f8fcff; }
+.list-group-item-action.active { background: var(--sc-blue-strong); border-color: var(--sc-blue-strong); }
+
+/* Soft status badges */
+.badge { font-weight: 500; padding: .4em .7em; border-radius: 20px; }
+.badge-scheduled, .badge-completed { background: #dcf5e7; color: #17663d; }
+.badge-cancelled { background: #eceff2; color: #56636e; }
+.badge-past { background: #f1f3f5; color: #6b7780; }
+.badge-waiting { background: #fff1d6; color: #8a5a00; }
+.badge-in_consultation, .badge-role { background: var(--sc-blue-tint); color: var(--sc-blue-dark); }
+.badge-urgent { background: #fde2e1; color: #a52520; }
+.badge-normal { background: #eceff2; color: #56636e; }
+
+/* Dashboard profile card */
+.sc-avatar {
+  width: 88px; height: 88px; border-radius: 50%; margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sc-blue-tint); color: var(--sc-blue-dark);
+  font-size: 1.9rem; font-weight: 600; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--sc-blue);
+}
+.sc-menu a {
+  display: block; padding: .7rem 1.25rem; color: var(--sc-ink); text-decoration: none;
+  border-top: 1px solid var(--sc-border);
+}
+.sc-menu a:hover { background: var(--sc-page); color: var(--sc-blue-strong); }
+.sc-menu a.active { color: var(--sc-blue-strong); font-weight: 600; box-shadow: inset 3px 0 0 var(--sc-blue); }
+
+/* Dashboard tabs */
+.sc-tabs .nav-link { color: var(--sc-muted); font-weight: 500; border: 0; border-bottom: 2px solid transparent; }
+.sc-tabs .nav-link.active { color: var(--sc-blue-strong); border-bottom-color: var(--sc-blue); background: none; }
+
+/* Login / register */
+.sc-auth { max-width: 440px; margin: 3rem auto; }
+.sc-auth .logo { max-width: 200px; margin: 0 auto 1.5rem; display: block; }
+
+@media print {
+  body { background: #fff; }
+  .sc-banner, .sc-navbar { display: none !important; }
+}

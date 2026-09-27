@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Log in - SmartClinic+{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-5">
-    <div class="card card-body shadow-sm">
-      <img src="{{ url_for('static', filename='logo.png') }}" alt="SmartClinic+" class="img-fluid mx-auto"
-           style="max-width: 260px; margin: -60px 0;">
-      <h1 class="h3 mb-3 text-center">Log in</h1>
+<div class="sc-auth">
+  <div>
+    <div class="sc-card p-4 p-md-5">
+      <img src="{{ url_for('static', filename='logo-wide.png') }}" alt="SmartClinic+" class="logo img-fluid">
+      <h1 class="h4 mb-1 text-center">Welcome back</h1>
+      <p class="text-muted text-center mb-4">Log in to SmartClinic+</p>
 
       <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

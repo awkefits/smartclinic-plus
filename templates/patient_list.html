@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Patients - SmartClinic+{% endblock %}
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1>Patients</h1>
-  {% if current_user.role == "admin" %}
-    <a class="btn btn-primary" href="{{ url_for('user_new') }}">+ New account</a>
+{% block heading %}Patients{% endblock %}
+{% block heading_actions %}
+{% if current_user.role == "admin" %}
+    <a class="btn btn-light" href="{{ url_for('user_new') }}">+ New account</a>
   {% endif %}
-</div>
+{% endblock %}
+{% block content %}
 
-<table class="table table-striped bg-white">
+<div class="sc-card overflow-hidden">
+<table class="table table-hover mb-0">
   <thead>
     <tr><th>Name</th><th>Email</th><th>Date of birth</th><th></th></tr>
   </thead>
@@ -25,4 +26,5 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

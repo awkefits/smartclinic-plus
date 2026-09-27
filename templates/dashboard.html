@@ -1,17 +1,205 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - SmartClinic+{% endblock %}
-{% block content %}
-<h1>Welcome, {{ current_user.name }}</h1>
-<p class="text-muted">You are logged in as <strong>{{ current_user.role }}</strong>.</p>
+{% block heading %}{{ current_user.role.title() }} Dashboard{% endblock %}
 
-{% if current_user.role == "patient" %}
-  <a class="btn btn-primary" href="{{ url_for('patient_view', profile_id=my_profile_id) }}">My profile</a>
-  <a class="btn btn-outline-primary" href="{{ url_for('queue_mine') }}">My queue status</a>
-{% else %}
-  <a class="btn btn-primary" href="{{ url_for('queue_board') }}">Waiting room</a>
-  <a class="btn btn-outline-primary" href="{{ url_for('patient_list') }}">Patients</a>
-  {% if current_user.role == "admin" %}
-    <a class="btn btn-outline-primary" href="{{ url_for('user_list') }}">Users</a>
-  {% endif %}
-{% endif %}
+{% macro view_all(endpoint, label="View all") %}
+  <div class="p-3 border-top text-end"><a href="{{ url_for(endpoint) }}">{{ label }} &rarr;</a></div>
+{% endmacro %}
+
+{% block content %}
+<div class="row g-4">
+
+  {# Left: profile card + menu #}
+  <div class="col-lg-3">
+    <div class="sc-card overflow-hidden">
+      <div class="text-center p-4">
+        <div class="sc-avatar mb-3">{{ initials }}</div>
+        <div class="fw-semibold fs-5">{{ current_user.name }}</div>
+        <span class="badge badge-role">{{ current_user.role }}</span>
+      </div>
+      <nav class="sc-menu d-none d-lg-block">
+        <a class="active" href="{{ url_for('dashboard') }}">Dashboard</a>
+        {% if current_user.role == "patient" %}
+          <a href="{{ url_for('patient_view', profile_id=my_profile_id) }}">My profile</a>
+          <a href="{{ url_for('appointment_book') }}">Book an appointment</a>
+          <a href="{{ url_for('appointment_list') }}">My appointments</a>
+          <a href="{{ url_for('queue_mine') }}">My queue status</a>
+          <a href="{{ url_for('prescription_list') }}">My prescriptions</a>
+        {% else %}
+          {% if current_user.role == "doctor" %}
+            <a href="{{ url_for('doctor_dashboard') }}">Patient lookup &amp; notes</a>
+            <a href="{{ url_for('prescription_new') }}">Write a prescription</a>
+          {% else %}
+            <a href="{{ url_for('appointment_book') }}">Book an appointment</a>
+            <a href="{{ url_for('queue_checkin') }}">Check in a patient</a>
+          {% endif %}
+          <a href="{{ url_for('queue_board') }}">Waiting room</a>
+          <a href="{{ url_for('appointment_list') }}">Appointments</a>
+          <a href="{{ url_for('patient_list') }}">Patients</a>
+          {% if current_user.role == "admin" %}<a href="{{ url_for('user_list') }}">Users</a>{% endif %}
+        {% endif %}
+        <a href="{{ url_for('notification_list') }}">Notifications</a>
+        <a href="{{ url_for('logout') }}">Log out</a>
+      </nav>
+    </div>
+  </div>
+
+  {# Right: tabs #}
+  <div class="col-lg-9">
+    <div class="sc-card">
+      <ul class="nav sc-tabs px-3 pt-2 border-bottom" role="tablist">
+        {% set tab_labels = {
+          "appointments": "Upcoming appointments" if current_user.role == "patient" else "Today's appointments",
+          "prescriptions": "Prescriptions" if current_user.role == "patient" else "Recent prescriptions",
+          "waiting": "Waiting room",
+          "patients": "Patients",
+          "queue": "Queue status",
+        } %}
+        {% set tab_names = tabs.keys()|list + (["queue"] if current_user.role == "patient" else []) %}
+        {% for name in tab_names %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link {{ 'active' if loop.first }}" id="tab-{{ name }}" data-bs-toggle="tab"
+                  data-bs-target="#pane-{{ name }}" type="button" role="tab"
+                  aria-controls="pane-{{ name }}" aria-selected="{{ 'true' if loop.first else 'false' }}">
+            {{ tab_labels[name] }}
+            {% if name in tabs and name != "patients" %}<span class="badge badge-role ms-1">{{ tabs[name]|length }}</span>{% endif %}
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <div class="tab-content">
+
+        {# Appointments (all roles) #}
+        <div class="tab-pane fade show active" id="pane-appointments" role="tabpanel" aria-labelledby="tab-appointments">
+          <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr>
+              {% if current_user.role == "patient" %}<th>Date</th>{% endif %}
+              <th>Time</th>
+              {% if current_user.role != "patient" %}<th>Patient</th>{% endif %}
+              {% if current_user.role != "doctor" %}<th>Doctor</th>{% endif %}
+              <th>Reason</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+              {% for a in tabs.appointments %}
+              <tr>
+                {% if current_user.role == "patient" %}<td>{{ a.appointment_date|nice_date }}</td>{% endif %}
+                <td>{{ a.appointment_time|slot }}</td>
+                {% if current_user.role != "patient" %}<td>{{ a.patient_name }}</td>{% endif %}
+                {% if current_user.role != "doctor" %}<td>{{ a.doctor_name }}</td>{% endif %}
+                <td>{{ a.reason or "-" }}</td>
+                <td><span class="badge badge-scheduled">scheduled</span></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted">
+                {{ "No upcoming appointments." if current_user.role == "patient" else "No appointments today." }}
+                {% if current_user.role != "doctor" %}<a href="{{ url_for('appointment_book') }}">Book one</a>{% endif %}
+              </td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+          {{ view_all("appointment_list") }}
+        </div>
+
+        {# Prescriptions (patient + doctor) #}
+        {% if "prescriptions" in tabs %}
+        <div class="tab-pane fade" id="pane-prescriptions" role="tabpanel" aria-labelledby="tab-prescriptions">
+          <table class="table mb-0">
+            <thead><tr>
+              <th>Rx no.</th><th>Issued</th>
+              <th>{{ "Prescriber" if current_user.role == "patient" else "Patient" }}</th>
+              <th>Medications</th><th></th>
+            </tr></thead>
+            <tbody>
+              {% for rx in tabs.prescriptions %}
+              <tr>
+                <td>RX-{{ "%06d"|format(rx.id) }}</td>
+                <td>{{ rx.issued_on|nice_date }}</td>
+                <td>{{ rx.doctor_name if current_user.role == "patient" else rx.patient_name }}</td>
+                <td>{{ rx.item_count }}</td>
+                <td><a href="{{ url_for('prescription_view', prescription_id=rx.id) }}">View</a></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted">No prescriptions yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {{ view_all("prescription_list") }}
+        </div>
+        {% endif %}
+
+        {# Waiting room (staff) #}
+        {% if "waiting" in tabs %}
+        <div class="tab-pane fade" id="pane-waiting" role="tabpanel" aria-labelledby="tab-waiting">
+          <div class="table-responsive">
+          <table class="table mb-0">
+            <thead><tr><th>Place</th><th>Patient</th><th>Doctor</th><th>Priority</th><th>Waiting</th></tr></thead>
+            <tbody>
+              {% for w in tabs.waiting %}
+              <tr>
+                <td>{{ w.place }}</td>
+                <td>{{ w.patient_name }}</td>
+                <td>{{ w.doctor_name or "Any doctor" }}</td>
+                <td><span class="badge badge-{{ w.priority }}">{{ w.priority }}</span></td>
+                <td>{{ w.minutes_waiting }} min</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted">Nobody is waiting.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+          {{ view_all("queue_board", "Open waiting room") }}
+        </div>
+        {% endif %}
+
+        {# Patients (nurse + admin) #}
+        {% if "patients" in tabs %}
+        <div class="tab-pane fade" id="pane-patients" role="tabpanel" aria-labelledby="tab-patients">
+          <table class="table mb-0">
+            <thead><tr><th>Name</th><th>Email</th><th>Date of birth</th><th></th></tr></thead>
+            <tbody>
+              {% for p in tabs.patients %}
+              <tr>
+                <td>{{ p.name }}</td>
+                <td>{{ p.email }}</td>
+                <td>{{ p.date_of_birth|nice_date }}</td>
+                <td><a href="{{ url_for('patient_view', profile_id=p.id) }}">View</a></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="text-muted">No patients yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {{ view_all("patient_list", "All patients") }}
+        </div>
+        {% endif %}
+
+        {# Queue status (patient) #}
+        {% if current_user.role == "patient" %}
+        <div class="tab-pane fade" id="pane-queue" role="tabpanel" aria-labelledby="tab-queue">
+          <div class="p-4">
+            {% if not queue_entry %}
+              <p class="text-muted">You are not checked in.</p>
+              <a class="btn btn-primary" href="{{ url_for('queue_checkin') }}">Check in</a>
+            {% elif queue_entry.status == "waiting" and my_place %}
+              <p class="display-6 mb-1">#{{ my_place.place }}</p>
+              <p class="text-muted mb-2">Your place in line</p>
+              <p class="mb-0">Estimated wait:
+                <strong>{% if my_place.estimated_minutes == 0 %}you're next{% else %}about {{ my_place.estimated_minutes }} minutes{% endif %}</strong>
+              </p>
+            {% else %}
+              <p class="mb-0"><span class="badge badge-in_consultation">in consultation</span> You are being seen now.</p>
+            {% endif %}
+          </div>
+          {{ view_all("queue_mine", "Open queue status") }}
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

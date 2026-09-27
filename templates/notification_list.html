@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Notifications - SmartClinic+{% endblock %}
+{% block heading %}Notifications{% endblock %}
+{% block content %}
+
+<div class="list-group sc-card overflow-hidden">
+  {% for notification in notifications %}
+  <div class="list-group-item {{ 'list-group-item-primary' if not notification.is_read }}">
+    <div class="d-flex justify-content-between">
+      <strong>{{ notification.notification_type }}</strong>
+      <small class="text-muted">{{ notification.created_at.strftime("%d %b %Y, %H:%M") }}</small>
+    </div>
+    {{ notification.message }}
+  </div>
+  {% else %}
+  <p class="text-muted">No notifications.</p>
+  {% endfor %}
+</div>
+{% endblock %}

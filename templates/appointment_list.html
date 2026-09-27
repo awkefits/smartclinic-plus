@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Appointments - SmartClinic+{% endblock %}
+{% block heading %}{{ "My appointments" if current_user.role in ("patient", "doctor") else "Appointments" }}{% endblock %}
+{% block heading_actions %}
+{% if current_user.role != "doctor" %}
+    <a class="btn btn-light" href="{{ url_for('appointment_book') }}">+ Book an appointment</a>
+  {% endif %}
+{% endblock %}
+{% block content %}
+
+<div class="table-responsive">
+<div class="sc-card overflow-hidden">
+<table class="table table-hover mb-0">
+  <thead>
+    <tr>
+      <th>Date</th><th>Time</th>
+      {% if current_user.role != "patient" %}<th>Patient</th>{% endif %}
+      {% if current_user.role != "doctor" %}<th>Doctor</th>{% endif %}
+      <th>Reason</th><th>Status</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for appointment in appointments %}
+    <tr>
+      <td>{{ appointment.appointment_date|nice_date }}</td>
+      <td>{{ appointment.appointment_time|slot }}</td>
+      {% if current_user.role != "patient" %}<td>{{ appointment.patient_name }}</td>{% endif %}
+      {% if current_user.role != "doctor" %}<td>{{ appointment.doctor_name }}</td>{% endif %}
+      <td>{{ appointment.reason or "-" }}</td>
+      <td>
+        {% if appointment.status == "cancelled" %}
+          <span class="badge badge-cancelled">cancelled</span>
+        {% elif appointment.appointment_date < today %}
+          <span class="badge badge-past">past</span>
+        {% else %}
+          <span class="badge badge-scheduled">scheduled</span>
+        {% endif %}
+      </td>
+      <td class="text-nowrap">
+        {% if appointment.status == "scheduled" and appointment.appointment_date >= today %}
+          <a class="btn btn-sm btn-outline-primary"
+             href="{{ url_for('appointment_reschedule', appointment_id=appointment.id) }}">Reschedule</a>
+          <form method="post" action="{{ url_for('appointment_cancel', appointment_id=appointment.id) }}"
+                class="d-inline" onsubmit="return confirm('Cancel this appointment?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit">Cancel</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-muted">No appointments found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}
