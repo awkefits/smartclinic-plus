@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SENG205 Doctor Dashboard</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #183047; background: #f2f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { background: #163d62; color: white; padding: 20px max(22px, calc((100vw - 1100px)/2)); display:flex; justify-content:space-between; align-items:center; gap:15px; }
+    header h1 { margin:0; font-size:1.4rem; } header small { color:#cbdcec; }
+    main { max-width:1100px; margin:28px auto; padding:0 22px 45px; }
+    .notice { background:#fff6dd; border:1px solid #eed58f; border-radius:10px; padding:12px 16px; margin-bottom:22px; font-size:.92rem; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+    section { background:white; border:1px solid #dce6ef; border-radius:14px; padding:22px; box-shadow:0 5px 18px #193b5910; min-width:0; }
+    section h2 { margin:0 0 6px; font-size:1.15rem; } .hint { color:#587084; margin:0 0 18px; font-size:.9rem; }
+    label { display:block; font-weight:650; margin:14px 0 7px; }
+    input, textarea, select { width:100%; border:1px solid #b9cad8; border-radius:8px; padding:11px 12px; font:inherit; color:#183047; background:white; }
+    input:focus, textarea:focus, select:focus, button:focus-visible { outline:3px solid #a5c8f5; outline-offset:2px; }
+    textarea { min-height:130px; resize:vertical; }
+    button { background:#17679b; color:white; border:0; border-radius:8px; font:inherit; font-weight:650; padding:10px 15px; cursor:pointer; }
+    button:hover { background:#124c73; } button.secondary { background:#eaf1f7; color:#174364; }
+    .row { display:flex; gap:10px; align-items:center; } .row input { flex:1; }
+    .list { display:grid; gap:9px; margin-top:15px; }
+    .item { border:1px solid #d8e4ee; border-radius:9px; padding:12px 14px; background:#fbfdff; }
+    .item strong { display:block; } .item small { color:#60768a; }
+    .item button { margin-top:9px; padding:6px 10px; font-size:.86rem; }
+    .wide { grid-column:1/-1; } .status { min-height:1.4em; margin:10px 0 0; font-weight:600; }
+    .success { color:#14704a; } .error { color:#a22627; }
+    .appointment { display:grid; grid-template-columns:150px 1fr auto; gap:12px; align-items:center; }
+    @media(max-width:720px) { header { padding:18px 22px; } .grid { grid-template-columns:1fr; } .wide { grid-column:auto; } .appointment { grid-template-columns:1fr; gap:4px; } .row { flex-wrap:wrap; } }
+  </style>
+</head>
+<body>
+<header><div><h1>Doctor Dashboard</h1><small>SENG205</small></div><span>Demo</span></header>
+<main>
+  
+    <section aria-labelledby="lookup-title">
+      <h2 id="lookup-title">Patient lookup</h2><p class="hint">Search a patient by name or ID, then select them for consultation notes.</p>
+      <form id="search-form"><label for="search">Patient name or ID</label><div class="row"><input id="search" placeholder="Try Alex or 101" autocomplete="off"><button type="submit">Search</button></div></form>
+      <div id="results" class="list" aria-live="polite"></div>
+    </section>
+    <section aria-labelledby="notes-title">
+      <h2 id="notes-title">Consultation notes</h2><p class="hint">Select a patient from search results before saving.</p>
+      <p><strong>Selected patient:</strong> <span id="selected">None</span></p>
+      <form id="notes-form"><label for="note">Notes</label><textarea id="note" placeholder="Enter consultation notes"></textarea><button type="submit">Save notes</button></form>
+      <p id="note-status" class="status" role="status"></p>
+      <div id="saved-notes" class="list"></div>
+    </section>
+    <section class="wide" aria-labelledby="schedule-title">
+      <h2 id="schedule-title">My schedule</h2><p class="hint">Appointments assigned to the demo doctor.</p>
+      <div id="schedule" class="list"></div>
+    </section>
+  </div>
+</main>
+<script>
+  'use strict';
+  const patients = [
+    {id:101, name:'Kas', dob:'12 April 1993'},
+    {id:102, name:'Chino', dob:'30 November 1988'},
+    {id:103, name:'Gean', dob:'7 June 2001'}
+  ];
+  const appointments = [
+    {doctorId:1, patientId:101, date:'1 October 2026', time:'9:00 am', status:'Scheduled'},
+    {doctorId:1, patientId:103, date:'1 October 2026', time:'11:30 am', status:'Scheduled'},
+    {doctorId:3, patientId:102, date:'1 October 2026', time:'10:00 am', status:'Scheduled'}
+  ];
+  const doctorId = 1; // Demo only: replace with an authenticated session from the group's backend.
+  const storageKey = 'seng205_member3_demo_notes_v1';
+  let selectedPatient = null;
+  let notes = [];
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (Array.isArray(stored)) notes = stored;
+  } catch (_) { notes = []; }
+  const $ = id => document.getElementById(id);
+  const setStatus = (message, isError=false) => {
+    $('note-status').textContent = message;
+    $('note-status').className = 'status ' + (isError ? 'error' : 'success');
+  };
+  function renderResults(matches) {
+    const container = $('results'); container.replaceChildren();
+    if (!matches.length) { container.textContent = 'Patient not found.'; return; }
+    matches.forEach(patient => {
+      const item = document.createElement('div'); item.className = 'item';
+      const title = document.createElement('strong'); title.textContent = patient.name + ' · ID ' + patient.id;
+      const detail = document.createElement('small'); detail.textContent = 'Date of birth: ' + patient.dob;
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Select patient';
+      button.addEventListener('click', () => {
+        selectedPatient = patient;
+        $('selected').textContent = patient.name + ' (ID ' + patient.id + ')';
+        setStatus(''); renderNotes(); $('note').focus();
+      });
+      item.append(title, detail, button); container.append(item);
+    });
+  }
+  function renderNotes() {
+    const container = $('saved-notes'); container.replaceChildren();
+    if (!selectedPatient) return;
+    const matching = notes.filter(n => n.patientId === selectedPatient.id).slice().reverse();
+    if (!matching.length) { container.textContent = 'No saved notes for this patient.'; return; }
+    matching.forEach(n => {
+      const item = document.createElement('div'); item.className = 'item';
+      const date = document.createElement('small'); date.textContent = n.createdAt;
+      const content = document.createElement('div'); content.textContent = n.text;
+      item.append(date, content); container.append(item);
+    });
+  }
+  function renderSchedule() {
+    const container = $('schedule');
+    appointments.filter(a => a.doctorId === doctorId).forEach(a => {
+      const p = patients.find(patient => patient.id === a.patientId);
+      const item = document.createElement('div'); item.className = 'item appointment';
+      for (const text of [a.date + ' · ' + a.time, p.name + ' (ID ' + p.id + ')', a.status]) {
+        const span = document.createElement('span'); span.textContent = text; item.append(span);
+      }
+      container.append(item);
+    });
+  }
+  $('search-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const query = $('search').value.trim().toLocaleLowerCase();
+    renderResults(query ? patients.filter(p => p.name.toLocaleLowerCase().includes(query) || String(p.id) === query) : []);
+  });
+  $('notes-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!selectedPatient) { setStatus('Select a patient before saving notes.', true); return; }
+    const text = $('note').value.trim();
+    if (!text) { setStatus('Consultation notes cannot be empty.', true); return; }
+    const next = [...notes, {patientId:selectedPatient.id, text, createdAt:new Date().toLocaleString()}];
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); }
+    catch (_) { setStatus('The browser could not save these notes. Check storage settings.', true); return; }
+    notes = next; $('note').value = ''; setStatus('Notes saved successfully.'); renderNotes();
+  });
+  renderSchedule();
+</script>
+</body>
+</html>
